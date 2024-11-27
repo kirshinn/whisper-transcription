@@ -1,5 +1,0 @@
-fastapi
-uvicorn
-openai-whisper
-python-multipart
-mysql-connector-python

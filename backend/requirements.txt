@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+openai-whisper
+python-multipart
+mysql-connector-python
+python-dotenv
+torch
+torchaudio
+# Для логирования
+structlog

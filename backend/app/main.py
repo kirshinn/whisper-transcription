@@ -1,8 +1,36 @@
-from fastapi import FastAPI, UploadFile, HTTPException
 import os
+import logging
 import whisper
 import mysql.connector
+from functools import lru_cache
+from fastapi import FastAPI, UploadFile, HTTPException
 from mysql.connector import Error
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+@lru_cache(maxsize=1)
+def load_whisper_model(model_name="base"):
+    """Кэширование загрузки модели"""
+    try:
+        # Путь к локальной папке, где хранятся модели
+        local_model_path = "/models/whisper"
+
+        # Загрузка модели  Whisper из указанного пути
+        model = whisper.load_model(model_name, download_root=local_model_path)
+
+        logger.info(f"Whisper model {model_name} loaded successfully")    
+        return model
+    except Exception as e:
+        logger.error(f"Model loading error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Загрузка модели Whisper из локального хранилища
+try:
+    model = load_whisper_model()
+except Exception as e:
+    logger.error(f"Transcription error: {e}")
+    raise HTTPException(status_code=500, detail=str(e))
 
 # Конфигурация базы данных
 DB_CONFIG = {
@@ -13,9 +41,6 @@ DB_CONFIG = {
 }
 
 app = FastAPI()
-
-# Загрузка модели Whisper
-model = whisper.load_model("base")
 
 # Подключение к базе данных
 def get_db_connection():

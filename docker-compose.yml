@@ -1,11 +1,13 @@
-version: '3.8'
-
 services:
   whisper-api:
-    build: ./whisper
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: whisper-api
     ports:
       - "8000:8000"
+    volumes:
+      - ./model_storage:/models/whisper
     environment:
       - DB_HOST=db
       - DB_USER=root
