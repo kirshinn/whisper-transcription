@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 @lru_cache(maxsize=1)
-def load_whisper_model(model_name="base"):
+def load_whisper_model(model_name="large"):
     """Кэширование загрузки модели"""
     try:
         # Путь к локальной папке, где хранятся модели

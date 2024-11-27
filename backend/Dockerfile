@@ -24,6 +24,6 @@ COPY app/ .
 RUN mkdir -p /models/whisper
 
 # Скачиваем модель Whisper
-RUN python -c "import whisper; whisper.load_model('base')"
+RUN python -c "import whisper; whisper.load_model('large')"
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
