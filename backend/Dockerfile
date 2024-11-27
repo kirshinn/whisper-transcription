@@ -23,7 +23,9 @@ COPY app/ .
 # Создаем директорию для моделей
 RUN mkdir -p /models/whisper
 
-# Скачиваем модель Whisper
-RUN python -c "import whisper; whisper.load_model('large')"
+# Проверяем, существует ли модель, и загружаем её только при необходимости
+RUN python -c "import os; import whisper; \
+if not os.path.exists('/models/whisper/large-v3.pt'): \
+    whisper.load_model('large')"
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
