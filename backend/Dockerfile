@@ -1,8 +1,10 @@
-FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+FROM python:3.10-slim
 
 # Установка системных зависимостей
 RUN apt-get update && apt-get install -y \
     git \
+    mc \
+    nano \
     ffmpeg \
     libsndfile1 \
     && apt-get clean
