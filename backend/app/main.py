@@ -12,14 +12,18 @@ logger = logging.getLogger(__name__)
 @lru_cache(maxsize=1)
 def load_whisper_model(model_name="large"):
     """Кэширование загрузки модели"""
+    local_model_path = "/models/whisper"
+    model_file = os.path.join(local_model_path, f"{model_name}-v3.pt")
     try:
-        # Путь к локальной папке, где хранятся модели
-        local_model_path = "/models/whisper"
-
-        # Загрузка модели  Whisper из указанного пути
+        # Проверка наличия модели
+        if not os.path.exists(model_file):
+            logger.info(f"Model {model_name} not found locally, downloading...")
+        else:
+            logger.info(f"Model {model_name} found locally at {model_file}.")
+        
+        # Загрузка модели Whisper из указанного пути
         model = whisper.load_model(model_name, download_root=local_model_path)
-
-        logger.info(f"Whisper model {model_name} loaded successfully")    
+        logger.info(f"Whisper model {model_name} loaded successfully")
         return model
     except Exception as e:
         logger.error(f"Model loading error: {e}")
