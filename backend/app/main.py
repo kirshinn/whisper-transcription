@@ -5,9 +5,14 @@ import mysql.connector
 from functools import lru_cache
 from fastapi import FastAPI, UploadFile, HTTPException
 from mysql.connector import Error
+from concurrent.futures import ThreadPoolExecutor
+import threading
+import time
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+app = FastAPI()
 
 @lru_cache(maxsize=1)
 def load_whisper_model(model_name="large"):
@@ -20,7 +25,7 @@ def load_whisper_model(model_name="large"):
             logger.info(f"Model {model_name} not found locally, downloading...")
         else:
             logger.info(f"Model {model_name} found locally at {model_file}.")
-        
+
         # Загрузка модели Whisper из указанного пути
         model = whisper.load_model(model_name, download_root=local_model_path)
         logger.info(f"Whisper model {model_name} loaded successfully")
@@ -33,7 +38,7 @@ def load_whisper_model(model_name="large"):
 try:
     model = load_whisper_model()
 except Exception as e:
-    logger.error(f"Transcription error: {e}")
+    logger.error(f"Model loading error: {e}")
     raise HTTPException(status_code=500, detail=str(e))
 
 # Конфигурация базы данных
@@ -44,16 +49,62 @@ DB_CONFIG = {
     "database": os.getenv("DB_NAME", "transcriptions"),
 }
 
-app = FastAPI()
-
 # Подключение к базе данных
 def get_db_connection():
     try:
         connection = mysql.connector.connect(**DB_CONFIG)
         return connection
     except Error as e:
-        print(f"Ошибка подключения к базе данных: {e}")
+        logger.error(f"Ошибка подключения к базе данных: {e}")
         return None
+
+# Фоновый обработчик задач
+executor = ThreadPoolExecutor(max_workers=4)
+lock = threading.Lock()
+
+def process_task():
+    while True:
+        connection = get_db_connection()
+        if not connection:
+            time.sleep(5)  # Подождать, если нет подключения
+            continue
+
+        cursor = connection.cursor(dictionary=True)
+        try:
+            # Выбрать задачу в статусе "queued"
+            with lock:
+                cursor.execute("SELECT * FROM tasks WHERE status = 'queued' LIMIT 1 FOR UPDATE")
+                task = cursor.fetchone()
+
+            if task:
+                logger.info(f"Processing task {task['id']}")
+                # Обновить статус задачи на "processing"
+                cursor.execute("UPDATE tasks SET status = 'processing' WHERE id = %s", (task['id'],))
+                connection.commit()
+
+                # Обработка файла
+                result = model.transcribe(task['file_path'])
+                transcription = result["text"]
+
+                # Обновить результат в базе
+                cursor.execute(
+                    "UPDATE tasks SET status = %s, result = %s WHERE id = %s",
+                    ("done", transcription, task["id"])
+                )
+                connection.commit()
+
+                # Удалить временный файл
+                os.remove(task["file_path"])
+            else:
+                time.sleep(2)  # Если задач нет, подождать
+        except Exception as e:
+            logger.error(f"Ошибка обработки задачи: {e}")
+        finally:
+            cursor.close()
+            connection.close()
+
+# Запуск фонового потока
+executor.submit(process_task)
 
 @app.post("/transcribe/")
 async def transcribe(file: UploadFile):
@@ -65,29 +116,42 @@ async def transcribe(file: UploadFile):
     with open(file_path, "wb") as f:
         f.write(await file.read())
 
-    # Обновляем статус задачи в базе данных
+    # Добавляем задачу в базу данных
     connection = get_db_connection()
     if not connection:
         raise HTTPException(status_code=500, detail="Ошибка подключения к базе данных")
+
     cursor = connection.cursor()
-
     try:
-        cursor.execute("INSERT INTO tasks (file_path, status) VALUES (%s, %s)", (file_path, "processing"))
+        cursor.execute("INSERT INTO tasks (file_path, status) VALUES (%s, %s)", (file_path, "queued"))
         task_id = cursor.lastrowid
-        connection.commit()
-
-        # Обрабатываем файл
-        result = model.transcribe(file_path)
-        transcription = result["text"]
-
-        # Сохраняем результат в базе
-        cursor.execute("UPDATE tasks SET status = %s, result = %s WHERE id = %s", ("done", transcription, task_id))
         connection.commit()
     except Error as e:
         raise HTTPException(status_code=500, detail=f"Ошибка базы данных: {e}")
     finally:
         cursor.close()
         connection.close()
-        os.remove(file_path)
 
-    return {"task_id": task_id, "transcription": transcription}
+    return {"task_id": task_id, "status": "queued"}
+
+@app.get("/task/{task_id}")
+async def get_task_status(task_id: int):
+    """Получение статуса задачи"""
+    connection = get_db_connection()
+    if not connection:
+        raise HTTPException(status_code=500, detail="Ошибка подключения к базе данных")
+
+    cursor = connection.cursor(dictionary=True)
+
+    try:
+        cursor.execute("SELECT * FROM tasks WHERE id = %s", (task_id,))
+        task = cursor.fetchone()
+
+        if not task:
+            raise HTTPException(status_code=404, detail="Задача не найдена")
+
+        return task
+
+    finally:
+        cursor.close()
+        connection.close()
