@@ -1,2 +1,6 @@
-.idea
+# folders
+.idea/
+db_data/
+
+# files
 .DS_Store

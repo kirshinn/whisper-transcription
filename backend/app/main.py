@@ -1,13 +1,13 @@
 import os
 import logging
+import threading
+import time
 import whisper
 import mysql.connector
 from functools import lru_cache
 from fastapi import FastAPI, UploadFile, HTTPException
 from mysql.connector import Error
 from concurrent.futures import ThreadPoolExecutor
-import threading
-import time
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -16,7 +16,9 @@ app = FastAPI()
 
 @lru_cache(maxsize=1)
 def load_whisper_model(model_name="large"):
-    """Кэширование загрузки модели"""
+    """
+        Кэширование и загрузки модели.
+    """
     local_model_path = "/models/whisper"
     model_file = os.path.join(local_model_path, f"{model_name}-v3.pt")
     try:
@@ -106,8 +108,11 @@ def process_task():
 # Запуск фонового потока
 executor.submit(process_task)
 
-@app.post("/transcribe/")
+@app.post("/transcribe")
 async def transcribe(file: UploadFile):
+    """
+        Транскрибация аудио в текст.
+    """
     if not file.filename.endswith((".mp3", ".wav", ".m4a")):
         raise HTTPException(status_code=400, detail="Неверный формат файла")
 
@@ -136,7 +141,9 @@ async def transcribe(file: UploadFile):
 
 @app.get("/task/{task_id}")
 async def get_task_status(task_id: int):
-    """Получение статуса задачи"""
+    """
+        Получение статуса задачи.
+    """
     connection = get_db_connection()
     if not connection:
         raise HTTPException(status_code=500, detail="Ошибка подключения к базе данных")
