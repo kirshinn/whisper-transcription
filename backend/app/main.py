@@ -1,11 +1,13 @@
 import os
+import bcrypt
 import logging
 import threading
 import time
 import whisper
 import mysql.connector
 from functools import lru_cache
-from fastapi import FastAPI, UploadFile, HTTPException
+from fastapi import FastAPI, Depends, UploadFile, HTTPException, status
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from mysql.connector import Error
 from concurrent.futures import ThreadPoolExecutor
 
@@ -20,8 +22,8 @@ security = HTTPBasic()
 
 def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
     """
-    Проверяет учетные данные пользователя, хранящиеся в базе данных.
-    Использует bcrypt для проверки хэшированного пароля.
+        Проверяет учетные данные пользователя, хранящиеся в базе данных.
+        Использует bcrypt для проверки хэшированного пароля.
     """
     connection = get_db_connection()
     if not connection:
@@ -54,7 +56,7 @@ def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
 
 def add_user(username: str, password: str):
     """
-    Добавляет нового пользователя в базу данных с хэшированным паролем.
+        Добавляет нового пользователя в базу данных с хэшированным паролем.
     """
     connection = get_db_connection()
     if not connection:
@@ -92,7 +94,7 @@ def add_user(username: str, password: str):
 
 def verify_admin(credentials: HTTPBasicCredentials):
     """
-    Проверяет, является ли текущий пользователь администратором.
+        Проверяет, является ли текущий пользователь администратором.
     """
     connection = get_db_connection()
     if not connection:
