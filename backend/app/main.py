@@ -12,7 +12,121 @@ from concurrent.futures import ThreadPoolExecutor
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Инициализация приложения
 app = FastAPI()
+
+# Basic Auth конфигурация
+security = HTTPBasic()
+
+def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
+    """
+    Проверяет учетные данные пользователя, хранящиеся в базе данных.
+    Использует bcrypt для проверки хэшированного пароля.
+    """
+    connection = get_db_connection()
+    if not connection:
+        raise HTTPException(status_code=500, detail="Ошибка подключения к базе данных")
+    cursor = connection.cursor(dictionary=True)
+    try:
+        # Найти пользователя по имени
+        cursor.execute("SELECT password FROM users WHERE username = %s", (credentials.username,))
+        user = cursor.fetchone()
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Неверные учетные данные",
+                headers={"WWW-Authenticate": "Basic"},
+            )
+
+        # Сравнение хэшированного пароля
+        hashed_password = user["password"].encode("utf-8")
+        if not bcrypt.checkpw(credentials.password.encode("utf-8"), hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Неверные учетные данные",
+                headers={"WWW-Authenticate": "Basic"},
+            )
+    finally:
+        cursor.close()
+        connection.close()
+
+
+def add_user(username: str, password: str):
+    """
+    Добавляет нового пользователя в базу данных с хэшированным паролем.
+    """
+    connection = get_db_connection()
+    if not connection:
+        raise HTTPException(status_code=500, detail="Ошибка подключения к базе данных")
+    cursor = connection.cursor()
+
+    try:
+        # Проверка, существует ли пользователь
+        cursor.execute("SELECT id FROM users WHERE username = %s", (username,))
+        if cursor.fetchone():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Пользователь с таким именем уже существует",
+            )
+
+        # Хэширование пароля
+        hashed_password = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+        # Добавление пользователя
+        cursor.execute(
+            "INSERT INTO users (username, password) VALUES (%s, %s)",
+            (username, hashed_password),
+        )
+        connection.commit()
+        return {"message": "Пользователь успешно добавлен"}
+    except Error as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка базы данных: {e}",
+        )
+    finally:
+        cursor.close()
+        connection.close()
+
+
+def verify_admin(credentials: HTTPBasicCredentials):
+    """
+    Проверяет, является ли текущий пользователь администратором.
+    """
+    connection = get_db_connection()
+    if not connection:
+        raise HTTPException(status_code=500, detail="Ошибка подключения к базе данных")
+    cursor = connection.cursor(dictionary=True)
+
+    try:
+        # Проверка наличия пользователя
+        cursor.execute("SELECT * FROM users WHERE username = %s", (credentials.username,))
+        user = cursor.fetchone()
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Неверные учетные данные",
+            )
+
+        # Проверка пароля
+        if not bcrypt.checkpw(credentials.password.encode("utf-8"), user["password"].encode("utf-8")):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Неверные учетные данные",
+            )
+
+        # Проверка роли
+        if user["role"] != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Доступ запрещен: требуется роль администратора",
+            )
+    finally:
+        cursor.close()
+        connection.close()
+
 
 @lru_cache(maxsize=1)
 def load_whisper_model(model_name="large"):
@@ -108,8 +222,17 @@ def process_task():
 # Запуск фонового потока
 executor.submit(process_task)
 
+
+@app.get("/healthcheck")
+async def root(credentials: HTTPBasicCredentials = Depends(authenticate)):
+    """
+        Пример защищенного маршрута.
+    """
+    return {"message": "Вы авторизованы и видите этот контент."}
+
+
 @app.post("/transcribe")
-async def transcribe(file: UploadFile):
+async def transcribe(file: UploadFile, credentials: HTTPBasicCredentials = Depends(authenticate)):
     """
         Транскрибация аудио в текст.
     """
@@ -139,8 +262,9 @@ async def transcribe(file: UploadFile):
 
     return {"task_id": task_id, "status": "queued"}
 
+
 @app.get("/task/{task_id}")
-async def get_task_status(task_id: int):
+async def get_task_status(task_id: int, credentials: HTTPBasicCredentials = Depends(authenticate)):
     """
         Получение статуса задачи.
     """
