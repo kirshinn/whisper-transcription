@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     status ENUM('queued', 'processing', 'done', 'error') DEFAULT 'queued',
     result TEXT,
     priority ENUM('default', 'low', 'medium', 'high') DEFAULT 'default',
+    prompts TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
