@@ -49,6 +49,9 @@ def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
                 detail="Неверные учетные данные",
                 headers={"WWW-Authenticate": "Basic"},
             )
+        
+        return credentials # Возвращаем credentials, если авторизация успешна
+
     finally:
         cursor.close()
         connection.close()
@@ -288,3 +291,9 @@ async def get_task_status(task_id: int, credentials: HTTPBasicCredentials = Depe
     finally:
         cursor.close()
         connection.close()
+
+
+@app.post("/user/add")
+async def add_new_user(username: str, password: str, credentials: HTTPBasicCredentials = Depends(authenticate)):
+    verify_admin(credentials)
+    return add_user(username=username, password=password)
