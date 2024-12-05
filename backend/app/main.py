@@ -203,8 +203,13 @@ def process_task():
                 cursor.execute("UPDATE tasks SET status = 'processing' WHERE id = %s", (task['id'],))
                 connection.commit()
 
-                # Обработка файла
-                result = model.transcribe(task['file_path'])
+                # Извлечение prompt (если существует)
+                prompt = task.get('prompts', None)
+                # Выведем в лог чтобы удостовериться в prompt
+                logger.info(prompt)
+
+                # Обработка файла с подсказкой
+                result = model.transcribe(task['file_path'], initial_prompt=prompt)
                 transcription = result["text"]
 
                 # Обновить результат в базе
@@ -237,7 +242,7 @@ async def root(credentials: HTTPBasicCredentials = Depends(authenticate)):
 
 
 @app.post("/transcribe")
-async def transcribe(file: UploadFile, credentials: HTTPBasicCredentials = Depends(authenticate)):
+async def transcribe(file: UploadFile, prompt: str = None, credentials: HTTPBasicCredentials = Depends(authenticate)):
     """
         Транскрибация аудио в текст.
     """
@@ -256,7 +261,7 @@ async def transcribe(file: UploadFile, credentials: HTTPBasicCredentials = Depen
 
     cursor = connection.cursor()
     try:
-        cursor.execute("INSERT INTO tasks (file_path, status) VALUES (%s, %s)", (file_path, "queued"))
+        cursor.execute("INSERT INTO tasks (file_path, status, prompts) VALUES (%s, %s, %s)", (file_path, "queued", prompt))
         task_id = cursor.lastrowid
         connection.commit()
     except Error as e:
