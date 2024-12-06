@@ -251,7 +251,8 @@ def process_task():
                 transcription = result["text"]
 
                 # Очистка текста, обработка пунктуации и прочее
-                transcription = clean_transcription(transcription)
+                if (task['is_spelling']):
+                    transcription = clean_transcription(transcription)
 
                 # Обновить результат в базе
                 cursor.execute(
@@ -283,7 +284,7 @@ async def root(credentials: HTTPBasicCredentials = Depends(authenticate)):
 
 
 @app.post("/transcribe")
-async def transcribe(file: UploadFile, prompt: str = None, credentials: HTTPBasicCredentials = Depends(authenticate)):
+async def transcribe(file: UploadFile, prompt: str = None, is_spelling: bool = False, credentials: HTTPBasicCredentials = Depends(authenticate)):
     """
         Транскрибация аудио в текст.
     """
@@ -302,7 +303,7 @@ async def transcribe(file: UploadFile, prompt: str = None, credentials: HTTPBasi
 
     cursor = connection.cursor()
     try:
-        cursor.execute("INSERT INTO tasks (file_path, status, prompts) VALUES (%s, %s, %s)", (file_path, "queued", prompt))
+        cursor.execute("INSERT INTO tasks (file_path, status, prompts, is_spelling) VALUES (%s, %s, %s, %s)", (file_path, "queued", prompt, int(is_spelling)))
         task_id = cursor.lastrowid
         connection.commit()
     except Error as e:
