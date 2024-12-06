@@ -5,6 +5,7 @@ openai-whisper
 python-multipart
 mysql-connector-python
 python-dotenv
+pyspellchecker
 torch
 torchaudio
 # Для логирования

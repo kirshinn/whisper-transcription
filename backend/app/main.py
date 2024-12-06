@@ -1,4 +1,5 @@
 import os
+import re
 import bcrypt
 import logging
 import threading
@@ -10,6 +11,7 @@ from fastapi import FastAPI, Depends, UploadFile, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from mysql.connector import Error
 from concurrent.futures import ThreadPoolExecutor
+from spellchecker import SpellChecker
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -133,6 +135,42 @@ def verify_admin(credentials: HTTPBasicCredentials):
         connection.close()
 
 
+def add_punctuation(text: str) -> str:
+    """
+    Добавляет базовую пунктуацию в текст. Если текст не заканчивается знаком, добавляется точка.
+
+    :param text: Текст для обработки.
+    :return: Текст с пунктуацией.
+    """
+    if not text.endswith(('.', '!', '?')):
+        text += '.'
+    return text
+
+
+def clean_transcription(text: str) -> str:
+    """
+    Очищает транскрипт: удаляет дубли, исправляет ошибки, добавляет пунктуацию.
+
+    :param text: Исходный текст транскрипции.
+    :return: Очищенный текст.
+    """
+    # Инициализация проверки орфографии для русского языка
+    spell = SpellChecker(language="ru")
+
+    # Удаление повторяющихся слов или фраз
+    text = re.sub(r'\b(\w+)(\s+\1\b)+', r'\1', text)
+
+    # Исправление орфографических ошибок
+    words = text.split()
+    corrected_words = [spell.correction(word) if word not in spell else word for word in words]
+    text = " ".join(corrected_words)
+
+    # Улучшение пунктуации
+    text = add_punctuation(text)
+
+    return text.strip()
+
+
 @lru_cache(maxsize=1)
 def load_whisper_model(model_name="large"):
     """
@@ -209,8 +247,11 @@ def process_task():
                 logger.info(prompt)
 
                 # Обработка файла с подсказкой
-                result = model.transcribe(task['file_path'], initial_prompt=prompt)
+                result = model.transcribe(task['file_path'], temperature=0.4, language="ru", initial_prompt=prompt)
                 transcription = result["text"]
+
+                # Очистка текста, обработка пунктуации и прочее
+                transcription = clean_transcription(transcription)
 
                 # Обновить результат в базе
                 cursor.execute(
