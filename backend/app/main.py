@@ -1,7 +1,7 @@
 import os
 import bcrypt
 import logging
-import threading
+import multiprocessing
 import time
 import whisper
 import mysql.connector
@@ -137,10 +137,9 @@ def clean_transcription(text: str) -> str:
     return text
 
 
-@lru_cache(maxsize=1)
 def load_whisper_model(model_name="large"):
     """
-        Кэширование и загрузки модели.
+        Загрузка модели.
     """
     local_model_path = "/models/whisper"
     model_file = os.path.join(local_model_path, f"{model_name}-v3.pt")
@@ -159,12 +158,6 @@ def load_whisper_model(model_name="large"):
         logger.error(f"Model loading error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Загрузка модели Whisper из локального хранилища
-try:
-    model = load_whisper_model()
-except Exception as e:
-    logger.error(f"Model loading error: {e}")
-    raise HTTPException(status_code=500, detail=str(e))
 
 # Конфигурация базы данных
 DB_CONFIG = {
@@ -183,63 +176,111 @@ def get_db_connection():
         logger.error(f"Ошибка подключения к базе данных: {e}")
         return None
 
-# Фоновый обработчик задач
-executor = ThreadPoolExecutor(max_workers=4)
-lock = threading.Lock()
+# Определение количества ядер CPU
+CPU_COUNT = (multiprocessing.cpu_count() // 2)
 
+# Конфигурация пула потоков с количеством воркеров
+executor = ThreadPoolExecutor(max_workers=max(CPU_COUNT, 2)) # Ограничим задачи 2 потоками, если не определено значение CPU_COUNT
+
+# Запуск задачи транскрибации аудио
 def process_task():
     while True:
-        connection = get_db_connection()
-        if not connection:
-            time.sleep(5)  # Подождать, если нет подключения
-            continue
-
-        cursor = connection.cursor(dictionary=True)
         try:
-            # Выбрать задачу в статусе "queued"
-            with lock:
-                cursor.execute("SELECT * FROM tasks WHERE status = 'queued' LIMIT 1 FOR UPDATE")
+            # Загрузка модели Whisper из локального хранилища
+            try:
+                model = load_whisper_model()
+            except Exception as e:
+                logger.error(f"Model loading error: {e}")
+
+            connection = get_db_connection()
+            if not connection:
+                time.sleep(5)
+                continue
+
+            cursor = connection.cursor(dictionary=True)
+            
+            try:
+                cursor.execute(
+                    "SELECT * FROM tasks WHERE status = 'queued' LIMIT 1 FOR UPDATE"
+                )
                 task = cursor.fetchone()
 
-            if task:
+                if not task:
+                    time.sleep(2)
+                    continue
+
+                # Проверяем, пустой ли файл
+                if os.path.getsize(task["file_path"]) == 0:
+                    logger.error(f"Пустой или некорректный файл: {task['file_path']}")
+                    cursor.execute(
+                        "UPDATE tasks SET status = 'error', result = 'Empty or invalid file' WHERE id = %s",
+                        (task['id'],)
+                    )
+                    connection.commit()
+                    continue  # Пропустить обработку этого задания
+
+                # Логика обработки задачи
                 logger.info(f"Processing task {task['id']}")
-                # Обновить статус задачи на "processing"
-                cursor.execute("UPDATE tasks SET status = 'processing' WHERE id = %s", (task['id'],))
+                cursor.execute(
+                    "UPDATE tasks SET status = 'processing' WHERE id = %s", 
+                    (task['id'],)
+                )
                 connection.commit()
 
-                # Извлечение prompt (если существует)
                 prompt = task.get('prompts', None)
                 # Выведем в лог чтобы удостовериться в prompt
                 logger.info(prompt)
 
-                # Обработка файла с подсказкой
-                result = model.transcribe(task['file_path'], temperature=0.4, language="ru", initial_prompt=prompt)
+                # Основная обработка
+                result = model.transcribe(
+                    task['file_path'], 
+                    temperature=0.4, 
+                    language="ru", 
+                    initial_prompt=prompt
+                )
                 transcription = result["text"]
 
                 # Очистка текста, обработка пунктуации и прочее
-                if (task['is_spelling']):
+                if task['is_spelling']:
                     transcription = clean_transcription(transcription)
 
-                # Обновить результат в базе
+                # Обновление результата
                 cursor.execute(
                     "UPDATE tasks SET status = %s, result = %s WHERE id = %s",
                     ("done", transcription, task["id"])
                 )
                 connection.commit()
 
-                # Удалить временный файл
+                # Удаление временного файла
                 os.remove(task["file_path"])
-            else:
-                time.sleep(2)  # Если задач нет, подождать
-        except Exception as e:
-            logger.error(f"Ошибка обработки задачи: {e}")
-        finally:
-            cursor.close()
-            connection.close()
 
-# Запуск фонового потока
-executor.submit(process_task)
+            except Exception as e:
+                logger.error(f"Ошибка обработки задачи: {e}")
+                # Обработка ошибок
+                if task:
+                    cursor.execute(
+                        "UPDATE tasks SET status = 'error' WHERE id = %s", 
+                        (task['id'],)
+                    )
+                    connection.commit()
+            
+            finally:
+                cursor.close()
+                connection.close()
 
+        except Exception as global_error:
+            logger.error(f"Глобальная ошибка: {global_error}")
+            time.sleep(5)
+
+# Динамический запуск потоков
+def start_task_processors():
+    for _ in range(max(CPU_COUNT, 2)):
+        executor.submit(process_task)
+
+# Вызов при старте приложения
+start_task_processors()
+
+# Обработчики
 
 @app.get("/healthcheck")
 async def root(credentials: HTTPBasicCredentials = Depends(authenticate)):
