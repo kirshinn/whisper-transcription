@@ -227,14 +227,18 @@ def process_task():
                 )
                 connection.commit()
 
+                # Получаем значение temperature
+                temperature = task.get('temperature', 0.2)
+
+                # Получаем значение prompt
                 prompt = task.get('prompts', None)
-                # Выведем в лог чтобы удостовериться в prompt
+                
                 logger.info(prompt)
 
                 # Основная обработка
                 result = model.transcribe(
                     task['file_path'], 
-                    temperature=0.4, 
+                    temperature=temperature, 
                     language="ru", 
                     initial_prompt=prompt
                 )
@@ -291,7 +295,7 @@ async def root(credentials: HTTPBasicCredentials = Depends(authenticate)):
 
 
 @app.post("/transcribe")
-async def transcribe(file: UploadFile, prompt: str = None, is_spelling: bool = False, credentials: HTTPBasicCredentials = Depends(authenticate)):
+async def transcribe(file: UploadFile, prompt: str = None, temperature: float = 0.2, is_spelling: bool = False, credentials: HTTPBasicCredentials = Depends(authenticate)):
     """
         Транскрибация аудио в текст.
     """
@@ -310,7 +314,7 @@ async def transcribe(file: UploadFile, prompt: str = None, is_spelling: bool = F
 
     cursor = connection.cursor()
     try:
-        cursor.execute("INSERT INTO tasks (file_path, status, prompts, is_spelling) VALUES (%s, %s, %s, %s)", (file_path, "queued", prompt, int(is_spelling)))
+        cursor.execute("INSERT INTO tasks (file_path, status, temperature, prompts, is_spelling) VALUES (%s, %s, %s, %s, %s)", (file_path, "queued", temperature, prompt, int(is_spelling)))
         task_id = cursor.lastrowid
         connection.commit()
     except Error as e:

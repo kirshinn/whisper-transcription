@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     id INT AUTO_INCREMENT PRIMARY KEY,
     file_path VARCHAR(255) NOT NULL,
     status ENUM('queued', 'processing', 'done', 'error') DEFAULT 'queued',
+    temperature FLOAT,
     result TEXT,
     priority ENUM('default', 'low', 'medium', 'high') DEFAULT 'default',
     prompts TEXT,
