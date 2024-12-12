@@ -184,14 +184,13 @@ executor = ThreadPoolExecutor(max_workers=max(CPU_COUNT, 2)) # Ограничи�
 
 # Запуск задачи транскрибации аудио
 def process_task():
+    # Загрузка модели Whisper из локального хранилища
+    try:
+        model = load_whisper_model()
+    except Exception as e:
+        logger.error(f"Model loading error: {e}")
     while True:
         try:
-            # Загрузка модели Whisper из локального хранилища
-            try:
-                model = load_whisper_model()
-            except Exception as e:
-                logger.error(f"Model loading error: {e}")
-
             connection = get_db_connection()
             if not connection:
                 time.sleep(5)
