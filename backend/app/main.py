@@ -207,7 +207,7 @@ def process_task(model_name="base"):
             
             try:
                 cursor.execute(
-                    "SELECT * FROM tasks WHERE status = 'queued' LIMIT 1 FOR UPDATE"
+                    "SELECT * FROM tasks WHERE status = 'queued' LIMIT 1"
                 )
                 task = cursor.fetchone()
 
