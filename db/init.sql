@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     priority ENUM('default', 'low', 'medium', 'high') DEFAULT 'default',
     prompts TEXT,
     is_spelling BOOLEAN DEFAULT FALSE,
-    model VARCHAR(50) NOT NULL,
+    model VARCHAR(50) DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );

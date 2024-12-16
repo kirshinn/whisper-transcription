@@ -228,8 +228,8 @@ def process_task(model_name="base"):
                 # Логика обработки задачи
                 logger.info(f"Processing task {task['id']}")
                 cursor.execute(
-                    "UPDATE tasks SET status = 'processing' WHERE id = %s", 
-                    (task['id'],)
+                    "UPDATE tasks SET status = 'processing', model = %s WHERE id = %s", 
+                    (model_name, task['id'],)
                 )
                 connection.commit()
 
