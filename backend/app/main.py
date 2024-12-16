@@ -1,15 +1,22 @@
 import os
 import bcrypt
 import logging
-import multiprocessing
+import threading
 import time
 import whisper
 import mysql.connector
-from functools import lru_cache
 from fastapi import FastAPI, Depends, UploadFile, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from mysql.connector import Error
 from concurrent.futures import ThreadPoolExecutor
+
+# Загрузка конфигурации из .env
+from dotenv import load_dotenv
+load_dotenv()
+
+# Чтение модели из .env
+MODEL_CONFIG = os.getenv("WHISPER_MODELS", "large,base,base,base,base")
+MODEL_LIST = [model.strip() for model in MODEL_CONFIG.split(",")]
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -137,7 +144,7 @@ def clean_transcription(text: str) -> str:
     return text
 
 
-def load_whisper_model(model_name="large"):
+def load_whisper_model(model_name="base"):
     """
         Загрузка модели.
     """
@@ -176,17 +183,17 @@ def get_db_connection():
         logger.error(f"Ошибка подключения к базе данных: {e}")
         return None
 
-# Определение количества ядер CPU
-CPU_COUNT = (multiprocessing.cpu_count() // 2)
 
 # Конфигурация пула потоков с количеством воркеров
-executor = ThreadPoolExecutor(max_workers=max(CPU_COUNT, 2)) # Ограничим задачи 2 потоками, если не определено значение CPU_COUNT
+executor = ThreadPoolExecutor(max_workers=len(MODEL_LIST)) # Ограничим задачи len(MODEL_LIST) потоками
 
 # Запуск задачи транскрибации аудио
-def process_task():
+def process_task(model_name="base"):
+    logger.info(f"Processing started for model {model_name} in thread {threading.current_thread().name}")
+
     # Загрузка модели Whisper из локального хранилища
     try:
-        model = load_whisper_model()
+        model = load_whisper_model(model_name=model_name)
     except Exception as e:
         logger.error(f"Model loading error: {e}")
     while True:
@@ -277,8 +284,10 @@ def process_task():
 
 # Динамический запуск потоков
 def start_task_processors():
-    for _ in range(max(CPU_COUNT, 2)):
-        executor.submit(process_task)
+    for i in range(len(MODEL_LIST)):
+        model_name = MODEL_LIST[i % len(MODEL_LIST)]  # Циклически выбираем модель из списка
+        logger.info(f"Thread {i}: Using model {model_name}")
+        executor.submit(process_task, model_name=model_name)
 
 # Вызов при старте приложения
 start_task_processors()
