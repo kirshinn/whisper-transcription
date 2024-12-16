@@ -8,6 +8,7 @@ services:
       - "8000:8000"
     volumes:
       - ./model_storage:/models/whisper
+      - ./tmp:/tmp
     environment:
       - DB_HOST=db
       - DB_USER=root
