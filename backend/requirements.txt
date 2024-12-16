@@ -1,6 +1,5 @@
 bcrypt
 fastapi
-dotenv
 uvicorn
 openai-whisper
 python-multipart
