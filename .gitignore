@@ -1,6 +1,7 @@
 # folders
 .idea/
 db_data/
+model_storage/
 
 # files
 .DS_Store

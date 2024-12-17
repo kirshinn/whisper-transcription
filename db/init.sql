@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     file_path VARCHAR(255) NOT NULL,
     status ENUM('queued', 'processing', 'done', 'error') DEFAULT 'queued',
     temperature FLOAT,
-    result TEXT,
+    result MEDIUMTEXT,
     priority ENUM('default', 'low', 'medium', 'high') DEFAULT 'default',
     prompts TEXT,
     is_spelling BOOLEAN DEFAULT FALSE,
