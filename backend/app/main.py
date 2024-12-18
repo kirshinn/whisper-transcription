@@ -5,8 +5,9 @@ import threading
 import time
 import whisper
 import mysql.connector
-from fastapi import FastAPI, Depends, UploadFile, HTTPException, status
+from fastapi import FastAPI, Depends, Query, UploadFile, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from typing import Optional, List
 from mysql.connector import Error
 from concurrent.futures import ThreadPoolExecutor
 
@@ -303,7 +304,9 @@ async def root(credentials: HTTPBasicCredentials = Depends(authenticate)):
 
 
 @app.post("/transcribe")
-async def transcribe(file: UploadFile, prompt: str = None, temperature: float = 0.2, is_spelling: bool = False, credentials: HTTPBasicCredentials = Depends(authenticate)):
+async def transcribe(file: UploadFile, prompt: str = None, temperature: float = 0.2, is_spelling: bool = False, 
+                     model: Optional[str] = Query(None, title="Model", description="Тип используемой модели Whisper", enum=["base", "large"]), # Значения для выпадающего списка
+                     credentials: HTTPBasicCredentials = Depends(authenticate)):
     """
         Транскрибация аудио в текст.
     """
@@ -322,7 +325,7 @@ async def transcribe(file: UploadFile, prompt: str = None, temperature: float = 
 
     cursor = connection.cursor()
     try:
-        cursor.execute("INSERT INTO tasks (file_path, status, temperature, prompts, is_spelling) VALUES (%s, %s, %s, %s, %s)", (file_path, "queued", temperature, prompt, int(is_spelling)))
+        cursor.execute("INSERT INTO tasks (file_path, status, temperature, prompts, is_spelling, model) VALUES (%s, %s, %s, %s, %s, %s)", (file_path, "queued", temperature, prompt, int(is_spelling), model))
         task_id = cursor.lastrowid
         connection.commit()
     except Error as e:
