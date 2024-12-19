@@ -1,2 +1,2 @@
 #!/bin/bash
-docker logs -f whisper-api
+docker logs -n -200 whisper-api

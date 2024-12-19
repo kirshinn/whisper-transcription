@@ -262,9 +262,6 @@ def process_task(model_name="base"):
                 )
                 connection.commit()
 
-                # Удаление временного файла
-                os.remove(task["file_path"])
-
             except Exception as e:
                 logger.error(f"Ошибка обработки задачи: {e}")
                 # Обработка ошибок
@@ -278,6 +275,9 @@ def process_task(model_name="base"):
             finally:
                 cursor.close()
                 connection.close()
+                # Удаление временного файла
+                if os.path.exists(task["file_path"]):
+                    os.remove(task["file_path"])
 
         except Exception as global_error:
             logger.error(f"Глобальная ошибка: {global_error}")
