@@ -3,6 +3,7 @@
 db_data/
 model_storage/
 backups/
+backend/app/__pycache__/
 
 # files
 .DS_Store
