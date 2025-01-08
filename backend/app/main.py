@@ -276,8 +276,13 @@ def process_task(model_name="base"):
                 cursor.close()
                 connection.close()
                 # Удаление временного файла
-                if os.path.exists(task["file_path"]):
-                    os.remove(task["file_path"])
+                if task and os.path.exists(task["file_path"]):
+                    try:
+                        os.remove(task["file_path"])
+                        logger.info(f"Временный файл {task['file_path']} удален.")
+                    except Exception as remove_error:
+                        logger.error(f"Ошибка удаления файла {task['file_path']}: {remove_error}")
+
 
         except Exception as global_error:
             logger.error(f"Глобальная ошибка: {global_error}")
