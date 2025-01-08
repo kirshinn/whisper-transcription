@@ -2,6 +2,7 @@
 .idea/
 db_data/
 model_storage/
+backups/
 
 # files
 .DS_Store
